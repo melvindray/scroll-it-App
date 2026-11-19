@@ -37,7 +37,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .subs:empty{display:none}
 .prog{position:absolute;inset-inline:0;bottom:var(--bot);height:3px;background:rgba(255,255,255,.15);z-index:3}
 .prog i{display:block;height:100%;width:0;background:var(--coral)}
-.paused::after{content:"▶";position:absolute;inset:0;display:grid;place-items:center;font-size:72px;color:rgba(255,255,255,.75);pointer-events:none}
+.paused::after{content:"▶";position:absolute;inset:0;z-index:2;display:grid;place-items:center;font-size:72px;color:rgba(255,255,255,.75);pointer-events:none}
 .heart{position:absolute;font-size:110px;pointer-events:none;animation:hp .8s ease-out forwards;z-index:4}
 @keyframes hp{0%{transform:scale(.3);opacity:0}30%{transform:scale(1.1);opacity:1}100%{transform:scale(1) translateY(-60px);opacity:0}}
 .badge.lang{top:calc(98px + var(--top));background:var(--plum,#6e4a6b)}.badge{position:absolute;top:calc(64px + var(--top));right:12px;padding:3px 9px;border-radius:99px;background:var(--teal);font-size:12px;font-weight:700;z-index:3}
@@ -70,6 +70,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 #start p{color:var(--soft);margin:0;max-width:320px}
 #start button{padding:14px 34px;border-radius:99px;background:var(--coral);font-size:18px;font-weight:700}
 .empty{height:100vh;display:grid;place-items:center;color:var(--soft);text-align:center;padding:30px;direction:rtl}
+.item .meta,.subs,.side{transition:transform .3s ease,bottom .3s ease,opacity .25s ease}
+.item:not(.ui) .meta{transform:translateY(110%)}
+.item:not(.ui) .side{opacity:0;pointer-events:none}
+.item:not(.ui) .subs{bottom:calc(16px + var(--bot));left:12px}
 </style>
 </head>
 <body>
@@ -144,7 +148,7 @@ function pauseAll() { V.pause(); }
 let preloader = document.createElement('link'); preloader.rel = 'preload'; preloader.as = 'video';
 function activate(i) {
   if (i === cur) return; const prev = cur; cur = i;
-  if (prev >= 0 && el(prev)) el(prev).classList.remove('paused');
+  if (prev >= 0 && el(prev)) el(prev).classList.remove('paused', 'ui');
   const it = items[i], d = el(i);
   V.pause(); d.querySelector('.vslot').appendChild(V);
   V.src = srcOf(it.c); V.currentTime = 0; V.playbackRate = st.speed;
@@ -152,8 +156,8 @@ function activate(i) {
   st.pos[st.sys + st.filt] = it.k; LS.set('pos', st.pos);
   if (started) play(i);
 }
-function play(i) { el(i).classList.remove('paused'); V.muted = false; V.playbackRate = st.speed; V.play().catch(() => { el(i).classList.add('paused'); }); }
-function togglePlay(i) { if (i !== cur) return; if (V.paused) play(i); else { V.pause(); el(i).classList.add('paused'); } }
+function play(i) { el(i).classList.remove('paused', 'ui'); V.muted = false; V.playbackRate = st.speed; V.play().catch(() => { el(i).classList.add('paused', 'ui'); }); }
+function togglePlay(i) { if (i !== cur) return; if (V.paused) play(i); else { V.pause(); el(i).classList.add('paused', 'ui'); } }
 V.addEventListener('timeupdate', () => onTime(cur));
 V.addEventListener('ended', () => { if (cur >= 0) { markSeen(cur); go(cur + 1); } });
 function onTime(i) {
