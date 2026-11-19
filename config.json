@@ -1,0 +1,4 @@
+{"systems":[
+ {"id":"respiratory","name":"מערכת הנשימה","base":"https://melvindray.github.io/scroll-it_Respiratory/"},
+ {"id":"cardio","name":"קרדיולוגיה","base":"https://melvindray.github.io/scroll-it_cardio/"}
+]}
