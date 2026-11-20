@@ -74,6 +74,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .item:not(.ui) .meta{transform:translateY(110%)}
 .item:not(.ui) .side{opacity:0;pointer-events:none}
 .item:not(.ui) .subs{bottom:calc(16px + var(--bot));left:12px}
+#start .reg{display:none;flex-direction:column;gap:12px;width:100%;max-width:320px;direction:rtl;text-align:right}
+#start.need .reg{display:flex}
+#start .reg input[type=text]{padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:inherit;font-size:16px}
+#start .reg label{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--soft)}
+#start .reg input[type=checkbox]{width:20px;height:20px;flex:none;margin-top:1px}
+#start button:disabled{opacity:.4}
+#start .off{color:var(--coral);max-width:320px}
 </style>
 </head>
 <body>
@@ -91,7 +98,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   <div class="list" id="films"></div>
 </div></div>
 
-<div id="start"><h1>Scroll<span>-it</span></h1><p>קורס הרפואה שלך, פרק אחרי פרק. גוללים למעלה לפרק הבא.</p><button id="go">▶ מתחילים</button></div>
+<div id="start"><h1>Scroll<span>-it</span></h1><p>קורס הרפואה שלך, פרק אחרי פרק. גוללים למעלה לפרק הבא.</p><div class="reg"><input type="text" id="regName" placeholder="שם פרטי ושם משפחה" autocomplete="name" maxlength="60"><label><input type="checkbox" id="regOk"><span>אני מסכים/ה שמקס יראה את השם שלי ואת הסרטונים שאני צופה בהם.</span></label></div><button id="go">▶ מתחילים</button></div>
 
 <script>
 const $ = s => document.querySelector(s), feed = $('#feed'), V = $('#vid');
@@ -102,9 +109,27 @@ const esc = s => String(s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&
 const lines = s => String(s || '').split(/\s+·\s+/).map(esc).join('<br>');
 const key = (f, c) => f.id + '/' + c.n;
 
+// ---- registration + activity (sent to Max's Google Sheet)
+let TRACK = null; const ME = LS.get('me', null); let Q = LS.get('q', []);
+function logEv(e, it, sec) { if (!TRACK || !LS.get('me', null)) return; Q.push({ t: Date.now(), e, f: it ? it.f.id : '', c: it ? it.c.n : '', ti: it ? it.c.title : '', s: sec || 0 }); if (Q.length > 400) Q = Q.slice(-400); LS.set('q', Q); }
+function flush(beacon) { const me = LS.get('me', null); if (!TRACK || !me) return; const ev = Q.splice(0, 150); LS.set('q', Q); const body = JSON.stringify({ u: me.u, name: me.name, ua: navigator.userAgent.includes('iPhone') ? 'iPhone' : navigator.userAgent.includes('Android') ? 'Android' : 'autre', ev });
+  if (beacon && navigator.sendBeacon) { navigator.sendBeacon(TRACK, new Blob([body], { type: 'text/plain' })); return; }
+  fetch(TRACK, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body }).catch(() => { Q = ev.concat(Q); LS.set('q', Q); }); }
+let watched = 0, lastT = 0, watchIt = null;
+function endWatch() { if (watchIt && watched >= 3) logEv('watch', watchIt, watched); watchIt = null; watched = 0; }
+async function gate() {
+  const me = LS.get('me', null);
+  if (!me) { $('#start').classList.add('need'); const ok = () => { $('#go').disabled = !($('#regName').value.trim().length >= 2 && $('#regOk').checked); }; $('#regName').oninput = ok; $('#regOk').onchange = ok; ok(); return; }
+  try { const r = await (await fetch(TRACK + '?u=' + encodeURIComponent(me.u))).json();
+    if (r && r.ok === false) { $('#start').innerHTML = '<h1>Scroll<span>-it</span></h1><p class="off">הגישה לאפליקציה הושבתה. לפרטים – לפנות למקס.</p>'; throw 'off'; }
+    if (r && r.known === false) { Q.unshift({ t: Date.now(), e: 'register' }); flush(); }
+  } catch (e) { if (e === 'off') throw e; }
+}
+
 async function boot() {
   const cfg = await (await fetch('config.json', { cache: 'no-cache' })).json();
-  SYS = cfg.systems;
+  SYS = cfg.systems; TRACK = cfg.track || null;
+  if (TRACK) { try { await gate(); } catch (e) { return; } setInterval(() => Q.length && flush(), 30000); }
   await Promise.all(SYS.map(async s => { try { const m = await (await fetch(s.base + 'manifest.json', { cache: 'no-cache' })).json(); m.films.forEach(f => f.clips.forEach(c => { for (const l in c.v) c.v[l] = s.base + c.v[l]; })); f_poster(m, s); DATA[s.id] = m; } catch (e) { DATA[s.id] = { films: [] }; } }));
   if (!st.sys || !SYS.find(s => s.id === st.sys)) st.sys = SYS[0].id;
   drawSys(); segs(); build();
@@ -147,7 +172,7 @@ function srcOf(c) { return c.v[st.lang] || c.v.he || c.v.en; }
 function pauseAll() { V.pause(); }
 let preloader = document.createElement('link'); preloader.rel = 'preload'; preloader.as = 'video';
 function activate(i) {
-  if (i === cur) return; const prev = cur; cur = i;
+  if (i === cur) return; const prev = cur; cur = i; endWatch(); watchIt = items[i]; lastT = 0;
   if (prev >= 0 && el(prev)) el(prev).classList.remove('paused', 'ui');
   const it = items[i], d = el(i);
   V.pause(); d.querySelector('.vslot').appendChild(V);
@@ -162,6 +187,7 @@ V.addEventListener('timeupdate', () => onTime(cur));
 V.addEventListener('ended', () => { if (cur >= 0) { markSeen(cur); go(cur + 1); } });
 function onTime(i) {
   if (i < 0 || !items[i]) return; const it = items[i], t = V.currentTime, d = el(i);
+  if (watchIt === it && !V.paused) { const dt = t - lastT; if (dt > 0 && dt < 2) watched += dt; } lastT = t;
   d.querySelector('.prog i').style.width = (100 * t / (V.duration || it.c.dur)) + '%';
   const q = it.c.cues.find(c => t >= c.a - 0.2 && t <= c.b + 0.3), s = d.querySelector('.subs');
   const h = !q || st.subs === 'off' ? '' : (st.subs !== 'en' ? `<div class="he ${q.sci ? 'sci' : ''}">${lines(q.he)}</div>` : '') + (st.subs !== 'he' ? `<div class="${q.sci ? 'sci' : ''}">${lines(q.en)}</div>` : '');
@@ -170,7 +196,7 @@ function onTime(i) {
 }
 function go(i) { if (i < items.length) feed.scrollTo({ top: i * feed.clientHeight, behavior: 'smooth' }); }
 function markSeen(i) { const k = items[i].k; if (st.seen[k]) return; st.seen[k] = Date.now(); LS.set('seen', st.seen); const b = el(i).querySelector('.badge'); b && b.remove(); }
-function toggleFav(i) { const k = items[i].k; if (st.fav[k]) delete st.fav[k]; else st.fav[k] = Date.now(); LS.set('fav', st.fav); el(i).querySelector('.fv').classList.toggle('on', !!st.fav[k]); }
+function toggleFav(i) { const k = items[i].k; if (st.fav[k]) delete st.fav[k]; else { st.fav[k] = Date.now(); logEv('fav', items[i]); } LS.set('fav', st.fav); el(i).querySelector('.fv').classList.toggle('on', !!st.fav[k]); }
 function heartAt(d, e) { const h = document.createElement('div'); h.className = 'heart'; h.textContent = '❤️'; h.style.left = (e.clientX - 55) + 'px'; h.style.top = (e.clientY - 70) + 'px'; d.appendChild(h); setTimeout(() => h.remove(), 800); }
 async function share(it) { const url = location.href.split('#')[0] + '#' + it.k; try { if (navigator.share) await navigator.share({ title: 'Scroll-it · ' + it.f.title, text: it.c.title, url }); else { await navigator.clipboard.writeText(url); alert('הקישור הועתק'); } } catch {} }
 function segs() {
@@ -187,9 +213,11 @@ function drawFilms() {
 function openMenu() { drawFilms(); $('#menu').classList.add('open'); }
 function closeMenu() { $('#menu').classList.remove('open'); }
 $('#menuBtn').onclick = openMenu; $('#menu').onclick = e => { if (e.target.id === 'menu') closeMenu(); };
-$('#go').onclick = () => { started = true; $('#start').remove(); const h = decodeURIComponent(location.hash.slice(1)); if (h) { const j = items.findIndex(x => x.k === h); if (j >= 0) { feed.scrollTop = j * feed.clientHeight; cur = -1; } } if (cur >= 0) play(cur); else activate(Math.round(feed.scrollTop / feed.clientHeight)); };
+$('#go').onclick = () => { if ($('#start').classList.contains('need')) { const me = { u: (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2)), name: $('#regName').value.trim() }; LS.set('me', me); Q.unshift({ t: Date.now(), e: 'register' }); flush(); }
+  if (TRACK) { logEv('open'); flush(); }
+  started = true; $('#start').remove(); const h = decodeURIComponent(location.hash.slice(1)); if (h) { const j = items.findIndex(x => x.k === h); if (j >= 0) { feed.scrollTop = j * feed.clientHeight; cur = -1; } } if (cur >= 0) play(cur); else activate(Math.round(feed.scrollTop / feed.clientHeight)); };
 document.addEventListener('keydown', e => { if (e.key === 'ArrowDown') go(cur + 1); if (e.key === 'ArrowUp') go(Math.max(0, cur - 1)); if (e.key === ' ') { e.preventDefault(); togglePlay(cur); } });
-document.addEventListener('visibilitychange', () => { if (document.hidden && cur >= 0) { V.pause(); el(cur).classList.add('paused'); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { endWatch(); if (cur >= 0) { watchIt = items[cur]; V.pause(); el(cur).classList.add('paused'); } flush(true); } });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 boot();
 </script>

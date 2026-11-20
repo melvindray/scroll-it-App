@@ -1,5 +1,5 @@
 // app shell offline; manifests network-first; clips cached as they are watched (max ~60)
-const V='si-v3', SHELL=['./','index.html','config.json','manifest.webmanifest','icons/icon-192.png'];
+const V='si-v4', SHELL=['./','index.html','config.json','manifest.webmanifest','icons/icon-192.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(SHELL)));self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V&&k!=='si-media').map(k=>caches.delete(k)))));self.clients.claim();});
 self.addEventListener('fetch',e=>{
